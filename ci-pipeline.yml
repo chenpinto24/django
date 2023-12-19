@@ -1,0 +1,58 @@
+name: Django CI Pipeline
+
+on:
+  push:
+    branches:
+      - '*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.8
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        
+
+    - name: Run Linter (Pylint)
+      run: |
+        pip install pylint
+        pylint .
+
+    - name: Build Docker Image
+      run: |
+        docker build -t testing .
+
+    - name: Save Docker Image
+      run: |
+        docker save -o /tmp/testing_image.tar testing
+
+    - name: Run Unit Tests and Coverage
+      run: |
+        docker run testing pytest --cov=.
+    - name: Download Test Reports
+      uses: actions/download-artifact@v2
+      with:
+        name: test-reports
+        path: /tmp/reports
+        
+    - name: Upload Docker Image to S3
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: eu-west-2
+
+    - name: Upload Docker Image and reports
+      run: aws s3 cp /tmp/testing_image.tar s3://my_s3_bucket/testing_image.tar
+      run: aws s3 cp /tmp/reports s3://my_s3_bucket/reports
+    
